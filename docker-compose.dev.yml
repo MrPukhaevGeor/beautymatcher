@@ -1,0 +1,14 @@
+services:
+  db:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_USER: matcher
+      POSTGRES_PASSWORD: matcher_dev_only
+      POSTGRES_DB: matcher
+    ports:
+      - "127.0.0.1:15432:5432"
+    volumes:
+      - matcher_dev_db:/var/lib/postgresql/data
+
+volumes:
+  matcher_dev_db:

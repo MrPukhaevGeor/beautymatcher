@@ -1,0 +1,17 @@
+node_modules
+.next
+.next-e2e
+out
+.env
+.env.local
+.env.production
+.claude
+# Содержит адрес и порт SSH рабочего сервера: только локально, в репозиторий не попадает.
+deploy/SHARED-SERVER.md
+uploads
+*.log
+next-env.d.ts
+tsconfig.tsbuildinfo
+playwright-report
+test-results
+src/generated

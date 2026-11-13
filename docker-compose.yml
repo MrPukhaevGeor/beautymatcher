@@ -1,0 +1,78 @@
+# Боевое размещение на сервере: сайт, база и Caddy (автоматический HTTPS).
+# Запуск: docker compose -p beauty-matcher --env-file .env.production up -d --build
+name: beauty-matcher
+
+services:
+  db:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: matcher
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?задайте POSTGRES_PASSWORD в .env.production}
+      POSTGRES_DB: matcher
+    volumes:
+      - db_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U matcher -d matcher"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    # Порты базы наружу не публикуются: к ней ходит только сайт внутри сети compose.
+
+  app:
+    build:
+      context: .
+      target: runner
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql://matcher:${POSTGRES_PASSWORD}@db:5432/matcher
+      DEMO_MODE: ${DEMO_MODE:-true}
+      SESSION_SECRET: ${SESSION_SECRET:?задайте SESSION_SECRET в .env.production}
+      SITE_URL: ${SITE_URL:?задайте SITE_URL в .env.production}
+      SMTP_URL: ${SMTP_URL:-}
+      MAIL_FROM: ${MAIL_FROM:-}
+    volumes:
+      - uploads:/app/uploads
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://localhost:3000/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    depends_on:
+      - app
+    environment:
+      SITE_DOMAIN: ${SITE_DOMAIN:?задайте SITE_DOMAIN в .env.production}
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+
+  # Служебные команды: docker compose --profile tools run --rm tools <команда>
+  tools:
+    profiles: ["tools"]
+    build:
+      context: .
+      target: tools
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql://matcher:${POSTGRES_PASSWORD}@db:5432/matcher
+      DEMO_MODE: ${DEMO_MODE:-true}
+
+volumes:
+  db_data:
+  uploads:
+  caddy_data:
+  caddy_config:

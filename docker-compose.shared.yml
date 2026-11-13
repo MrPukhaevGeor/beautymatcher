@@ -1,0 +1,85 @@
+# Демо на общем сервере, где уже работают другие приложения (прод!).
+# Отличия от docker-compose.yml:
+#  - нет своего Caddy: порты 80 и 443 держит nginx хоста, он проксирует на 127.0.0.1:3100;
+#  - порты наружу не публикуются, кроме 127.0.0.1:3100 для nginx;
+#  - лимиты памяти, процессора и размера журналов, чтобы демо не мешало соседям;
+#  - свои имена проекта, сети и тома: с контейнерами и томами других приложений не пересекается;
+#  - ничего не хранится на диске, кроме небольшой базы (фото в демо не принимаются).
+# Образы собираются у себя и переносятся на сервер, на сервере сборка не нужна.
+name: beauty-matcher
+
+x-logging: &logging
+  driver: json-file
+  options: { max-size: "10m", max-file: "3" }
+
+services:
+  db:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: matcher
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?задайте POSTGRES_PASSWORD в .env.production}
+      POSTGRES_DB: matcher
+    command: ["postgres", "-c", "shared_buffers=64MB", "-c", "max_connections=30"]
+    volumes:
+      - db_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U matcher -d matcher"]
+      interval: 10s
+      timeout: 3s
+      retries: 20
+    mem_limit: 384m
+    cpus: 0.5
+    logging: *logging
+
+  app:
+    image: beauty-matcher-app:${APP_TAG:-local}
+    build:
+      context: .
+      target: runner
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql://matcher:${POSTGRES_PASSWORD}@db:5432/matcher
+      # В общем окружении всегда демо: настоящие данные на этом сервере не собираем.
+      DEMO_MODE: "true"
+      SESSION_SECRET: ${SESSION_SECRET:?задайте SESSION_SECRET в .env.production}
+      SITE_URL: ${SITE_URL:?задайте SITE_URL в .env.production}
+    ports:
+      - "127.0.0.1:3100:3000"
+    # Загрузка фото в демо отключена, поэтому каталог загрузок живёт в памяти и диск не занимает.
+    tmpfs:
+      - /app/uploads:uid=1001,gid=1001,size=16m
+    security_opt: ["no-new-privileges:true"]
+    cap_drop: ["ALL"]
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://localhost:3000/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+    mem_limit: 512m
+    cpus: 1
+    logging: *logging
+
+  # Служебные команды (создать таблицы, сбросить демо-данные):
+  #   docker compose -f docker-compose.shared.yml --env-file .env.production --profile tools run --rm tools <команда>
+  tools:
+    profiles: ["tools"]
+    image: beauty-matcher-tools:${APP_TAG:-local}
+    build:
+      context: .
+      target: tools
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql://matcher:${POSTGRES_PASSWORD}@db:5432/matcher
+      DEMO_MODE: "true"
+    mem_limit: 512m
+    logging: *logging
+
+volumes:
+  db_data:

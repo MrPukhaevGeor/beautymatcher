@@ -1,0 +1,58 @@
+# Пример блока nginx для демо. НЕ применяется автоматически.
+# Кладётся ОТДЕЛЬНЫМ файлом, например /etc/nginx/conf.d/beauty-matcher-demo.conf.
+# Существующие файлы с другими сайтами не меняются.
+#
+# Замените DEMO_DOMAIN на купленный домен (например, example.ru), везде, где он встречается.
+# Применение в два этапа, потому что для HTTPS-блока нужен готовый сертификат:
+#   Этап 1: оставьте только первый блок (порт 80), nginx -t, reload, выпустите сертификат так же, как для основного сайта.
+#   Этап 2: добавьте второй блок (порт 443), снова nginx -t, только потом reload.
+# Перед каждым reload: sudo nginx -t. Если проверка не прошла, reload НЕ выполнять.
+#
+# Откат: удалить этот файл, sudo nginx -t, sudo systemctl reload nginx.
+
+# Свой ограничитель запросов с уникальным именем зоны: чужие настройки не затрагиваются.
+limit_req_zone $binary_remote_addr zone=bm_demo:5m rate=10r/s;
+
+# ---------- Этап 1: порт 80 ----------
+server {
+    listen 80;
+    listen [::]:80;
+    server_name DEMO_DOMAIN;
+
+    # Проверка домена для выпуска сертификата. Путь должен совпадать с тем, как certbot настроен для основного сайта.
+    location /.well-known/acme-challenge/ {
+        root /var/www/certbot;
+    }
+
+    location / {
+        return 301 https://$host$request_uri;
+    }
+}
+
+# ---------- Этап 2: порт 443 (добавлять только после выпуска сертификата) ----------
+server {
+    listen 443 ssl;
+    listen [::]:443 ssl;
+    server_name DEMO_DOMAIN;
+
+    ssl_certificate     /etc/letsencrypt/live/DEMO_DOMAIN/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/DEMO_DOMAIN/privkey.pem;
+
+    # Демо с вымышленными данными: поисковикам запрещаем индексацию и на уровне прокси.
+    add_header X-Robots-Tag "noindex, nofollow" always;
+    add_header X-Content-Type-Options "nosniff" always;
+    add_header X-Frame-Options "DENY" always;
+    add_header Referrer-Policy "strict-origin-when-cross-origin" always;
+
+    client_max_body_size 1m;
+
+    location / {
+        limit_req zone=bm_demo burst=30 nodelay;
+        proxy_pass http://127.0.0.1:3100;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_read_timeout 30s;
+    }
+}
