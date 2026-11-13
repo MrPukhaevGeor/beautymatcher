@@ -54,6 +54,10 @@ echo 'CREATE DATABASE matcher_e2e;' | docker exec -i beauty-matcher-db-1 psql -U
 
 ## Размещение демо-ссылки
 
+**Vercel + Neon через GitHub (только демо):** пошагово в `deploy/VERCEL.md`. Ночной сброс данных работает там через Vercel Cron, маршрут `/api/cron/reset` закрыт секретом `CRON_SECRET`. Схему и демо-данные в базу Neon применяет `node deploy/remote-init.mjs`.
+
+**Свой сервер (Docker + Caddy)**, как ниже:
+
 Нужны: сервер с Ubuntu (от 2 ядер и 4 ГБ памяти) в России, Docker, домен с записью DNS на сервер.
 
 1. Скопируйте проект на сервер, например в `/opt/beauty-matcher`.

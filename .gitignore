@@ -2,9 +2,11 @@ node_modules
 .next
 .next-e2e
 out
-.env
-.env.local
-.env.production
+# Любые файлы с настройками и секретами (.env.railway, .env.vercel и т. п.), кроме примеров.
+.env*
+!.env.example
+!.env.production.example
+.vercel
 .claude
 # Содержит адрес и порт SSH рабочего сервера: только локально, в репозиторий не попадает.
 deploy/SHARED-SERVER.md

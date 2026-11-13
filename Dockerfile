@@ -23,6 +23,8 @@ RUN echo '{"name":"tools","private":true,"type":"module"}' > package.json \
 COPY prisma ./prisma
 COPY prisma.config.ts ./
 COPY --from=builder /app/src/generated ./src/generated
+# Сид импортирует общий модуль с данными; он использует только относительные импорты.
+COPY src/lib/seed-demo.ts ./src/lib/seed-demo.ts
 
 FROM base AS runner
 ENV NODE_ENV=production NEXT_TELEMETRY_DISABLED=1 PORT=3000 HOSTNAME=0.0.0.0
